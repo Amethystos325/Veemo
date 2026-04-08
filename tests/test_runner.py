@@ -11,6 +11,8 @@ from veemo.types import RenderResult
 class FakeBackend:
     renders: list[RenderResult]
     heartbeat_calls: int = 0
+    pending_actions: list[bool] = field(default_factory=list)
+    runtime_modes: list[str] = field(default_factory=list)
 
     def ensure_device_token(self) -> str:
         return "token"
@@ -21,6 +23,15 @@ class FakeBackend:
     def post_heartbeat(self) -> bool:
         self.heartbeat_calls += 1
         return True
+
+    def set_runtime_mode(self, mode: str) -> bool:
+        self.runtime_modes.append(mode)
+        return True
+
+    def has_pending_remote_action(self) -> bool:
+        if not self.pending_actions:
+            return False
+        return self.pending_actions.pop(0)
 
 
 @dataclass
@@ -95,3 +106,23 @@ def test_runner_applies_refresh_override_and_retries():
     assert success.refresh_minutes == 45
     assert runner.state.effective_refresh_minutes == 45
     assert failure.retry_delay_seconds == 5
+
+
+def test_runner_wakes_early_for_pending_action(monkeypatch):
+    backend = FakeBackend([make_render("a")], pending_actions=[False, True])
+    display = FakeDisplay()
+    runner = VeemoRunner(settings=make_settings(), backend=backend, display=display)
+
+    current = {"value": 0.0}
+
+    def fake_monotonic():
+        return current["value"]
+
+    def fake_sleep(seconds: float):
+        current["value"] += seconds
+
+    monkeypatch.setattr("veemo.runner.time.monotonic", fake_monotonic)
+    monkeypatch.setattr("veemo.runner.time.sleep", fake_sleep)
+
+    assert runner._sleep_until_next_poll(60) is True
+    assert current["value"] == 5

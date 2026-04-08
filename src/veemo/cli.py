@@ -71,9 +71,11 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "run":
         try:
             display.init()
+            backend.set_runtime_mode("active")
             runner.run_forever()
             return 0
         finally:
+            backend.set_runtime_mode("interval")
             display.close()
     parser.error(f"Unsupported command: {args.command}")
     return 2

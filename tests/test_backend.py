@@ -105,3 +105,34 @@ def test_post_heartbeat_retries_on_401(monkeypatch):
 
     assert backend.post_heartbeat() is True
     assert len(session.calls) == 4
+
+
+def test_set_runtime_mode_retries_on_401():
+    session = FakeSession(
+        [
+            FakeResponse(200, json_data={"token": "old-token", "new": True}),
+            FakeResponse(401, text="unauthorized"),
+            FakeResponse(200, json_data={"token": "new-token", "new": False}),
+            FakeResponse(200, json_data={"ok": True, "runtime_mode": "active"}),
+        ]
+    )
+    backend = make_backend(session)
+
+    assert backend.set_runtime_mode("active") is True
+    assert len(session.calls) == 4
+
+
+def test_has_pending_remote_action_reads_device_state():
+    session = FakeSession(
+        [
+            FakeResponse(200, json_data={"token": "token", "new": True}),
+            FakeResponse(
+                200,
+                json_data={"runtime_mode": "active", "pending_refresh": 1, "pending_mode": ""},
+            ),
+        ]
+    )
+    backend = make_backend(session)
+
+    assert backend.has_pending_remote_action() is True
+    assert len(session.calls) == 2

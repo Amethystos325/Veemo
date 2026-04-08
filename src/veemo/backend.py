@@ -60,6 +60,37 @@ class InksightCompatibleBackend:
             LOGGER.warning("Heartbeat failed: %s", exc)
             return False
 
+    def set_runtime_mode(self, mode: str) -> bool:
+        normalized = str(mode).strip().lower()
+        if normalized not in {"active", "interval"}:
+            raise ValueError("runtime mode must be 'active' or 'interval'")
+        try:
+            return self._set_runtime_mode_with_retry(normalized, retry_on_401=True)
+        except BackendError as exc:
+            LOGGER.warning("Failed to set runtime mode to %s: %s", normalized, exc)
+            return False
+
+    def has_pending_remote_action(self) -> bool:
+        try:
+            state = self._get_device_state_with_retry(retry_on_401=True)
+        except BackendError as exc:
+            LOGGER.warning("Device state poll failed: %s", exc)
+            return False
+
+        pending_refresh = bool(state.get("pending_refresh"))
+        pending_mode = str(state.get("pending_mode") or "").strip()
+        runtime_mode = str(state.get("runtime_mode") or "").strip().lower()
+        if pending_refresh or pending_mode:
+            LOGGER.info(
+                "Pending device action detected: pending_refresh=%s pending_mode=%s runtime_mode=%s",
+                pending_refresh,
+                pending_mode or "<none>",
+                runtime_mode or "<unknown>",
+            )
+            return True
+        LOGGER.debug("Device state polled: runtime_mode=%s", runtime_mode or "<unknown>")
+        return False
+
     def _fetch_render_with_retry(self, retry_on_401: bool) -> RenderResult:
         rssi = detect_wifi_rssi()
         params = {
@@ -139,6 +170,45 @@ class InksightCompatibleBackend:
         if response.status_code < 200 or response.status_code >= 300:
             raise BackendError(f"Heartbeat failed with status {response.status_code}")
         LOGGER.info("Heartbeat accepted with status %s", response.status_code)
+
+    def _set_runtime_mode_with_retry(self, mode: str, retry_on_401: bool) -> bool:
+        url = f"{self.settings.base_url}/api/device/{self.identity.mac}/runtime"
+        LOGGER.info("Setting runtime mode: mac=%s mode=%s", self.identity.mac, mode)
+        response = self._post(url, json={"mode": mode}, headers=self._auth_headers())
+        if response.status_code == 401 and retry_on_401:
+            LOGGER.warning("Runtime mode update returned 401, refreshing device token and retrying once")
+            self._device_token = None
+            self.ensure_device_token()
+            return self._set_runtime_mode_with_retry(mode, retry_on_401=False)
+        if response.status_code == 404:
+            LOGGER.info("Runtime mode endpoint not available; continuing without explicit runtime mode")
+            return True
+        if response.status_code < 200 or response.status_code >= 300:
+            raise BackendError(f"Runtime mode update failed with status {response.status_code}")
+        LOGGER.info("Runtime mode set to %s", mode)
+        return True
+
+    def _get_device_state_with_retry(self, retry_on_401: bool) -> dict[str, Any]:
+        url = f"{self.settings.base_url}/api/device/{self.identity.mac}/state"
+        response = self._get(url, headers=self._auth_headers())
+        if response.status_code == 401 and retry_on_401:
+            LOGGER.warning("Device state request returned 401, refreshing device token and retrying once")
+            self._device_token = None
+            self.ensure_device_token()
+            return self._get_device_state_with_retry(retry_on_401=False)
+        if response.status_code == 404:
+            LOGGER.info("Device state not found yet for %s", self.identity.mac)
+            return {}
+        if response.status_code != 200:
+            raise BackendError(f"Device state request failed with status {response.status_code}")
+        payload = self._json(response)
+        LOGGER.debug(
+            "Device state response: runtime_mode=%s pending_refresh=%s pending_mode=%s",
+            payload.get("runtime_mode"),
+            payload.get("pending_refresh"),
+            payload.get("pending_mode"),
+        )
+        return payload
 
     def _auth_headers(self) -> dict[str, str]:
         return {

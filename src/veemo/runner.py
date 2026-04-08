@@ -11,6 +11,7 @@ from .types import BackendAdapter, RenderResult
 
 LOGGER = logging.getLogger(__name__)
 RETRY_DELAYS_SECONDS = (5, 15, 30, 60, 120)
+ACTIVE_POLL_INTERVAL_SECONDS = 5
 
 
 @dataclass(slots=True)
@@ -54,7 +55,9 @@ class VeemoRunner:
             refresh_minutes = outcome.refresh_minutes or self.state.effective_refresh_minutes
             sleep_seconds = max(refresh_minutes * 60, 1)
             LOGGER.info("Sleeping %ss until next poll", sleep_seconds)
-            time.sleep(sleep_seconds)
+            if self._sleep_until_next_poll(sleep_seconds):
+                LOGGER.info("Remote action requested immediate refresh")
+                continue
 
     def run_once(self) -> RenderOutcome:
         try:
@@ -150,3 +153,15 @@ class VeemoRunner:
         if self.backend.post_heartbeat():
             self.state.last_heartbeat_at = now
             LOGGER.info("Heartbeat cycle complete")
+
+    def _sleep_until_next_poll(self, sleep_seconds: int) -> bool:
+        deadline = time.monotonic() + max(sleep_seconds, 0)
+        while True:
+            now = time.monotonic()
+            remaining = deadline - now
+            if remaining <= 0:
+                return False
+            self._maybe_send_heartbeat()
+            if self.backend.has_pending_remote_action():
+                return True
+            time.sleep(min(ACTIVE_POLL_INTERVAL_SECONDS, remaining))
