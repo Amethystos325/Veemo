@@ -1,0 +1,23 @@
+[backend]
+kind = "inksight"
+base_url = "https://www.inksight.site"
+request_timeout_seconds = 30
+heartbeat_enabled = true
+heartbeat_interval_seconds = 600
+
+[device]
+name = "veemo-rpi"
+mac_override = ""
+refresh_minutes = 30
+full_refresh_every = 10
+skip_unchanged_frames = true
+
+[display]
+model = "waveshare_epd_4in2_v2"
+width = 400
+height = 300
+fast_mode = true
+sleep_after_render = false
+
+[logging]
+level = "INFO"

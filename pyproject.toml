@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "veemo"
+version = "0.1.0"
+description = "Raspberry Pi InkSight-compatible e-paper client"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "Pillow>=10.0.0",
+  "requests>=2.31.0",
+]
+
+[project.scripts]
+veemo = "veemo.cli:main"
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0.0",
+]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

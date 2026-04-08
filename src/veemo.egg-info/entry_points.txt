@@ -1,0 +1,2 @@
+[console_scripts]
+veemo = veemo.cli:main

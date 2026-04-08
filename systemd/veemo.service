@@ -1,0 +1,17 @@
+[Unit]
+Description=Veemo InkSight client
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=cat
+WorkingDirectory=/home/cat/veemo
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONPATH=/home/cat/veemo/src
+ExecStart=/usr/bin/python3 -m veemo --config /home/cat/veemo/veemo.toml run
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
