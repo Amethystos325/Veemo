@@ -7,9 +7,13 @@ shows them on the connected display without porting the ESP32 firmware stack.
 ## Features
 
 - Runs as a foreground CLI or a `systemd` service
-- Uses the existing InkSight device APIs for token, render, and heartbeat
+- Uses the existing InkSight device APIs for token, render, heartbeat, runtime
+  mode, and device state polling
 - Supports fast refresh with periodic full refresh to reduce ghosting
 - Skips unchanged frames by default
+- Switches the device to InkSight `active` runtime while `veemo run` is
+  running, so config saves and `Apply to E-Ink` can wake the client without
+  waiting for the next long refresh interval
 - Keeps the backend integration abstract so the same client can target the
   official hosted backend or a self-hosted InkSight deployment
 
@@ -51,20 +55,24 @@ Environment overrides:
 Run once:
 
 ```bash
-veemo once
+veemo --config veemo.toml once
 ```
 
 Run continuously:
 
 ```bash
-veemo run
+veemo --config veemo.toml run
 ```
 
 Run diagnostics:
 
 ```bash
-veemo doctor
+veemo --config veemo.toml doctor
 ```
+
+`veemo doctor` prints the current backend URL, detected MAC, SSID, RSSI,
+backend HTTP probe result, display initialization result, and device token
+status.
 
 ## systemd
 
@@ -89,3 +97,6 @@ sudo systemctl enable --now veemo.service
 - The client only supports 400x300 monochrome BMP payloads in v1.
 - On restart Veemo requests the device token again; InkSight will reuse the
   existing token for the same MAC if one already exists.
+- While `veemo.service` is running, manual `veemo once` or `veemo doctor`
+  commands on the same Raspberry Pi can fail with `GPIO busy`. Stop the service
+  first if you need exclusive access to the display hardware.
